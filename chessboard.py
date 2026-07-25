@@ -9,39 +9,29 @@ import pygame
 
 pygame.init()
 CHESS_FONT = pygame.font.SysFont("Arial", 48)
-
-
-SERIAL_PORT = '/dev/cu.usbmodem11201'
-baud = 9600
-
-tolerance = 15
-BASE = 520
-LOW_BASE = BASE - tolerance
-HIGH_BASE = BASE + tolerance
-
-LOW_OCC = 250
-HIGH_OCC = 790
-
-arduino = serial.Serial(port = SERIAL_PORT, baudrate = baud, timeout = 1)
-board_dim = (8, 8)
-time.sleep(1)
-print("im in")
-time.sleep(2)
-
-
-board_arr = np.full(board_dim, "-", dtype = '<U1')
-
 SCREEN_WIDTH = 1000
 SCREEN_HEIGHT = 800
 SQUARE_SIZE = SCREEN_HEIGHT / 8
 WINDOW = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-
-
 LIGHT = (240, 217, 181)
 DARK = (181, 136, 99)
 
-board = chess.Board(None)
+SERIAL_PORT = '/dev/cu.usbmodem31201'
+baud = 9600
 
+board_dim = (8, 8)
+BASE = 520
+base = np.full(board_dim, -1, dtype=float)
+OCC_OFF = 15
+
+arduino = serial.Serial(port = SERIAL_PORT, baudrate = baud, timeout = 1)
+time.sleep(2)
+
+board_arr = np.full(board_dim, "-", dtype = '<U1')
+board_data_pres = np.zeros(board_dim, dtype=float)
+
+board = chess.Board(None)
+ref_board = chess.Board()
 
 def drawBoard():
 	for r in range(8):
@@ -65,18 +55,7 @@ def drawBoard():
 				WINDOW.blit(text, text_rect)
 	pygame.display.flip()		
 
-ref_board = chess.Board()
 
-pieces = [
-["BR", "BN", "BB", "BQ", "BK", "BB", "BN", "BR"],
-["BP", "BP", "BP", "BP", "BP", "BP", "BP", "BP"],
-["", "", "", "", "", "", "", ""],
-["", "", "", "", "", "", "", ""],
-["", "", "", "", "", "", "", ""],
-["", "", "", "", "", "", "", ""],
-["WP", "WP", "WP", "WP", "WP", "WP", "WP", "WP"],
-["WR", "WN", "WB", "WQ", "WK", "WB", "WN", "WR"]
-]
 
 def indexToMove2(pos1, pos2):
 	# convert array index (like (6,6) --> (5,5)) to UCI notation (g7f6)
@@ -109,18 +88,38 @@ def indexToMove1(pos1):
 	#print(str(col1) + str(row1))
 	return chess.parse_square(str(col1) + str(row1))
 
+def calibrate(sample_time=2.0):
+	sums = np.zeros(board_dim, dtype=float)
+	count = np.zeros(board_dim, dtype=float)
+	
+	start_time = time.time()
+	
+	while time.time() - start_time < sample_time:
+		if arduino.in_waiting > 0:
+			data = arduino.readline().decode('utf-8').strip().split()
+			raw_data = [float(x) for x in data]
+			if len(raw_data) == 16:
+				flat_sum = sums.flat
+				flat_count = count.flat
+				
+				for i in range(16):
+					if raw_data[i] != -1.0:
+						flat_sum[i] += raw_data[i]
+						flat_count[i] += 1
+		time.sleep(0.01)
 
+	flat_base = base.flat
+	flat_sum = sums.flat
+	flat_count = count.flat
 
+	for i in range(64):
+		if flat_count[i] > 0:
+			flat_base[i] = flat_sum[i] / flat_count[i]
+		else:
+			flat_base[i] = -1.0
 
-def calibrate():
-	pass
-
-def movePiece(arr, start, end):
-	arr[end[0]][end[1]] = arr[start[0]][start[1]]
-	pieces[end[0]][end[1]] = pieces[start[0]][start[1]]
-
-	arr[start[0]][start[1]] = BASE
-	pieces[start[0]][start[1]] = ""
+	active = np.sum(base != -1.0)
+	print(f"{active} sensors") 
 
 def boardWithSensors():
 	board.clear()
@@ -128,60 +127,59 @@ def boardWithSensors():
 		for c in range(8):
 			sq = indexToMove1((r,c))
 			piece = ref_board.piece_at(sq)
+			baseVal = base[r, c]
+			if baseVal == -1:
+				continue
 
 			if piece is not None:
-				if (board_data_pres[r,c] > HIGH_BASE):
+				if (board_data_pres[r,c] > baseVal + OCC_OFF):
 					new_piece = chess.Piece(piece.piece_type, chess.WHITE)
 					board.set_piece_at(sq, new_piece)
 					#print(indexToMove1((r, c)))
 
-				if (board_data_pres[r,c] < LOW_BASE):
+				if (board_data_pres[r,c] < baseVal - OCC_OFF):
 					new_piece = chess.Piece(piece.piece_type, chess.BLACK)
 					board.set_piece_at(sq, new_piece)
 					#print(indexToMove1((r, c)))
 
-step = 0
-board_data_pres = np.full(board_dim, BASE, dtype=float)
-
+calibrate()
+board_data_pres = np.copy(base)
 board_data_past = np.copy(board_data_pres)
 
-lifted = None
-placed = None
-
 while True:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            sys.exit()
+	for event in pygame.event.get():
+		if event.type == pygame.QUIT:
+			sys.exit()
 
-    boardWithSensors()
+	boardWithSensors()
 
-    if keyboard.is_pressed("="):
-        sys.exit()
+	if keyboard.is_pressed("="):
+		sys.exit()
 
-    if arduino.in_waiting > 0:
-        data = arduino.readline().decode('utf-8', errors='ignore').strip().split()
-        
-        try:
-            raw_data = [float(i) for i in data]
-            
-            if len(raw_data) == 16:
-                flat_pres = board_data_pres.flat
-                for i in range(16):
-                    if raw_data[i] != -1.0:
-                        flat_pres[i] = raw_data[i]
+	if arduino.in_waiting > 0:
+		data = arduino.readline().decode('utf-8', errors='ignore').strip().split()
+		
+		try:
+			raw_data = [float(i) for i in data]
+			
+			if len(raw_data) == 16:
+				flat_pres = board_data_pres.flat
+				for i in range(16):
+					if raw_data[i] != -1.0:
+						flat_pres[i] = raw_data[i]
 
-        except ValueError:
-            pass 
+		except ValueError:
+			pass 
 
-    drawBoard()
+	drawBoard()
 
-    diff = board_data_pres - board_data_past
-    if np.sum(np.abs(diff)) > 10:        
-        os.system('clear')
-        print(board_data_pres.reshape(board_dim))
-        board_data_past = np.copy(board_data_pres)
+	diff = board_data_pres - board_data_past
+	if np.sum(np.abs(diff)) > 10:        
+		os.system('clear')
+		print(board_data_pres.reshape(board_dim))
+		board_data_past = np.copy(board_data_pres)
 
-    time.sleep(0.02) 
+	time.sleep(0.02) 
 
 
 # -1 (no sensor) --> -

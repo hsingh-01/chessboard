@@ -6,7 +6,8 @@ const int s1 = 4;
 const int s2 = 5;
 const int s3 = 6;
 
-int hasSensor1[2] = {0, 15};
+int hasSensor1[8] = {15, 14, 13, 12, 11, 10, 9, 8};
+int numSensors = sizeof(hasSensor1) / sizeof(hasSensor1[0]);
 
 const int enablePin = 2;
 
@@ -40,7 +41,7 @@ void printArr(float arr[], int n){
 void loop() {
 
 
-  for (int i = 0; i < sizeof(hasSensor1); i++) {
+  for (int i = 0; i < numSensors; i++) {
     int sensor = hasSensor1[i];
 
     digitalWrite(s0, bitRead(sensor, 0));
@@ -53,5 +54,5 @@ void loop() {
   printArr(analogOuts1, 16);
   Serial.print("\n");
 
-  delay(50);
+  delay(300);
 }

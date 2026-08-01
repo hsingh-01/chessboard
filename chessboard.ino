@@ -1,22 +1,17 @@
-const int sigPin = A0;
+int sigPins[2] = {A0, A1};
 
-float analogOuts1[16];
+float analogOuts[16];
 const int s0 = 3;
 const int s1 = 4;
 const int s2 = 5;
 const int s3 = 6;
 
-int hasSensor1[8] = {15, 14, 13, 12, 11, 10, 9, 8};
-int numSensors = sizeof(hasSensor1) / sizeof(hasSensor1[0]);
-
-const int enablePin = 2;
-
-
-
 void setup() {
+  delay(2000);
   Serial.begin(9600);
-  pinMode(enablePin, OUTPUT);
-  digitalWrite(enablePin, 0);  // low enable
+  //Serial.print("Beginning setup");
+  pinMode(13, OUTPUT);
+  digitalWrite(13, LOW);
 
   pinMode(s0, OUTPUT);
   pinMode(s1, OUTPUT);
@@ -25,14 +20,15 @@ void setup() {
 
   //Serial.println("-------------------------");
   for (int i = 0; i < 16; i++){
-    analogOuts1[i] = -1.0;
+    analogOuts[i] = -1.0;
   }
+  //Serial.print("setup done");
 }
 
 void printArr(float arr[], int n){
   for (int i = 0; i < n; i++){
     Serial.print(arr[i]);
-    Serial.print("\t");
+    Serial.print(" ");
   }
   Serial.print("\n");
   //Serial.print("-------------------------");
@@ -41,17 +37,16 @@ void printArr(float arr[], int n){
 void loop() {
 
 
-  for (int i = 0; i < numSensors; i++) {
-    int sensor = hasSensor1[i];
+  for (int i = 0; i < 16; i++) {
+    digitalWrite(s0, bitRead(i, 0));
+    digitalWrite(s1, bitRead(i, 1));
+    digitalWrite(s2, bitRead(i, 2));
+    digitalWrite(s3, bitRead(i, 3));
+    delayMicroseconds(100);
 
-    digitalWrite(s0, bitRead(sensor, 0));
-    digitalWrite(s1, bitRead(sensor, 1));
-    digitalWrite(s2, bitRead(sensor, 2));
-    digitalWrite(s3, bitRead(sensor, 3));
-    delayMicroseconds(10);
-    analogOuts1[sensor] = analogRead(sigPin);
+    analogOuts[i] = analogRead(A0);
   }
-  printArr(analogOuts1, 16);
+  printArr(analogOuts, 8);
   Serial.print("\n");
 
   delay(300);

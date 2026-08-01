@@ -16,7 +16,7 @@ WINDOW = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 LIGHT = (240, 217, 181)
 DARK = (181, 136, 99)
 
-SERIAL_PORT = '/dev/cu.usbmodem31201'
+SERIAL_PORT = '/dev/cu.usbmodem11201'
 baud = 9600
 
 board_dim = (8, 8)
@@ -88,31 +88,38 @@ def indexToMove1(pos1):
 	#print(str(col1) + str(row1))
 	return chess.parse_square(str(col1) + str(row1))
 
-def calibrate(sample_time=2.0):
+def calibrate(sample_time=5.0):
 	sums = np.zeros(board_dim, dtype=float)
 	count = np.zeros(board_dim, dtype=float)
 	
 	start_time = time.time()
-	
+	firstRun = True
+
 	while time.time() - start_time < sample_time:
 		if arduino.in_waiting > 0:
+			if (firstRun == True):
+				time.sleep(0.05)
+				firstRun = False
+				continue
+
 			data = arduino.readline().decode('utf-8').strip().split()
 			raw_data = [float(x) for x in data]
-			if len(raw_data) == 16:
-				flat_sum = sums.flat
-				flat_count = count.flat
-				
-				for i in range(16):
-					if raw_data[i] != -1.0:
-						flat_sum[i] += raw_data[i]
-						flat_count[i] += 1
-		time.sleep(0.01)
+			flat_sum = sums.flat
+			flat_count = count.flat
+			
+			for i in range(len(raw_data)):
+				if raw_data[i] != -1.0:
+					flat_sum[i] += raw_data[i]
+					flat_count[i] += 1
+				if (i == 0):
+					print(raw_data[i])
+		time.sleep(0.02)
 
 	flat_base = base.flat
 	flat_sum = sums.flat
 	flat_count = count.flat
 
-	for i in range(64):
+	for i in range(8):
 		if flat_count[i] > 0:
 			flat_base[i] = flat_sum[i] / flat_count[i]
 		else:
@@ -142,7 +149,8 @@ def boardWithSensors():
 					board.set_piece_at(sq, new_piece)
 					#print(indexToMove1((r, c)))
 
-calibrate()
+time.sleep(2)
+calibrate(3)
 board_data_pres = np.copy(base)
 board_data_past = np.copy(board_data_pres)
 
@@ -161,12 +169,10 @@ while True:
 		
 		try:
 			raw_data = [float(i) for i in data]
-			
-			if len(raw_data) == 16:
-				flat_pres = board_data_pres.flat
-				for i in range(16):
-					if raw_data[i] != -1.0:
-						flat_pres[i] = raw_data[i]
+			flat_pres = board_data_pres.flat
+			for i in range(len(raw_data)):
+				if raw_data[i] != -1.0:
+					flat_pres[i] = raw_data[i]
 
 		except ValueError:
 			pass 
@@ -179,10 +185,4 @@ while True:
 		print(board_data_pres.reshape(board_dim))
 		board_data_past = np.copy(board_data_pres)
 
-	time.sleep(0.02) 
-
-
-# -1 (no sensor) --> -
-# (510, 530) (sensor, empty) --> " "
-# (0, 510) (sensor, black) --> B
-# (530, 1024) (sensor, white) --> W
+	time.sleep(0.03) 

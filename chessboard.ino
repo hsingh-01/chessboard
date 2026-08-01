@@ -9,7 +9,6 @@ const int s3 = 6;
 void setup() {
   delay(2000);
   Serial.begin(9600);
-  //Serial.print("Beginning setup");
   pinMode(13, OUTPUT);
   digitalWrite(13, LOW);
 
@@ -18,11 +17,9 @@ void setup() {
   pinMode(s2, OUTPUT);
   pinMode(s3, OUTPUT);
 
-  //Serial.println("-------------------------");
   for (int i = 0; i < 16; i++){
     analogOuts[i] = -1.0;
   }
-  //Serial.print("setup done");
 }
 
 void printArr(float arr[], int n){
@@ -31,7 +28,6 @@ void printArr(float arr[], int n){
     Serial.print(" ");
   }
   Serial.print("\n");
-  //Serial.print("-------------------------");
 }
 
 void loop() {

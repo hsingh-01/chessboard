@@ -1,4 +1,5 @@
 import serial
+import serial.tools.list_ports
 import time
 import numpy as np
 import os
@@ -15,12 +16,17 @@ SQUARE_SIZE = SCREEN_HEIGHT / 8
 WINDOW = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 LIGHT = (240, 217, 181)
 DARK = (181, 136, 99)
+board_dim = (8, 8)
 
-SERIAL_PORT = '/dev/cu.usbmodem11201'
+
+ports = serial.tools.list_ports.comports()
+for port in ports:
+	if port.vid is not None or "Arduino" in str(port.description):
+		print(f"arduino on: {port.device}, {port.description}")
+		print(port.device)
+SERIAL_PORT = port.device
 baud = 9600
 
-board_dim = (8, 8)
-BASE = 520
 base = np.full(board_dim, -1, dtype=float)
 OCC_OFF = 15
 
@@ -93,14 +99,9 @@ def calibrate(sample_time=5.0):
 	count = np.zeros(board_dim, dtype=float)
 	
 	start_time = time.time()
-	firstRun = True
 
 	while time.time() - start_time < sample_time:
 		if arduino.in_waiting > 0:
-			if (firstRun == True):
-				time.sleep(0.05)
-				firstRun = False
-				continue
 
 			data = arduino.readline().decode('utf-8').strip().split()
 			raw_data = [float(x) for x in data]
@@ -108,25 +109,23 @@ def calibrate(sample_time=5.0):
 			flat_count = count.flat
 			
 			for i in range(len(raw_data)):
-				if raw_data[i] != -1.0:
+				if (raw_data[i] > 100): # filter out nonsense values
 					flat_sum[i] += raw_data[i]
 					flat_count[i] += 1
-				if (i == 0):
-					print(raw_data[i])
-		time.sleep(0.02)
+		time.sleep(0.008)
 
 	flat_base = base.flat
 	flat_sum = sums.flat
 	flat_count = count.flat
 
-	for i in range(8):
+	for i in range(len(flat_count)):
 		if flat_count[i] > 0:
 			flat_base[i] = flat_sum[i] / flat_count[i]
 		else:
 			flat_base[i] = -1.0
 
 	active = np.sum(base != -1.0)
-	print(f"{active} sensors") 
+	print(f"{active} sensors detected") 
 
 def boardWithSensors():
 	board.clear()
@@ -150,7 +149,10 @@ def boardWithSensors():
 					#print(indexToMove1((r, c)))
 
 time.sleep(2)
-calibrate(3)
+print("calibrating")
+calibrate(8)
+print("calibration done")
+
 board_data_pres = np.copy(base)
 board_data_past = np.copy(board_data_pres)
 
@@ -185,4 +187,4 @@ while True:
 		print(board_data_pres.reshape(board_dim))
 		board_data_past = np.copy(board_data_pres)
 
-	time.sleep(0.03) 
+	time.sleep(0.01) 

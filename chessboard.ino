@@ -42,8 +42,8 @@ void loop() {
 
     analogOuts[i] = analogRead(A0);
   }
-  printArr(analogOuts, 8);
+  printArr(analogOuts, 16);
   Serial.print("\n");
 
-  delay(300);
+  delay(0.05);
 }

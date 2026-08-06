@@ -104,7 +104,12 @@ def calibrate(sample_time=5.0):
 		if arduino.in_waiting > 0:
 
 			data = arduino.readline().decode('utf-8').strip().split()
-			raw_data = [float(x) for x in data]
+			try:
+				raw_data = [float(x) for x in data]
+			except ValueError:
+				print("caught midline, restarting")
+				continue
+
 			flat_sum = sums.flat
 			flat_count = count.flat
 			

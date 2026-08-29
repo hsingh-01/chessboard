@@ -4,7 +4,6 @@ import time
 import numpy as np
 import os
 import chess
-import keyboard
 import sys
 import pygame
 
@@ -16,6 +15,7 @@ SQUARE_SIZE = SCREEN_HEIGHT / 8
 WINDOW = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 LIGHT = (240, 217, 181)
 DARK = (181, 136, 99)
+BLACK = (0, 0, 0)
 board_dim = (8, 8)
 
 
@@ -24,11 +24,13 @@ for port in ports:
 	if port.vid is not None or "Arduino" in str(port.description):
 		print(f"arduino on: {port.device}, {port.description}")
 		print(port.device)
+
 SERIAL_PORT = port.device
 baud = 9600
 
 base = np.full(board_dim, -1, dtype=float)
-OCC_OFF = 15
+OCC_OFF = 10
+DIF_OFF = 100
 
 arduino = serial.Serial(port = SERIAL_PORT, baudrate = baud, timeout = 1)
 time.sleep(2)
@@ -38,6 +40,36 @@ board_data_pres = np.zeros(board_dim, dtype=float)
 
 board = chess.Board(None)
 ref_board = chess.Board()
+#ref_board.clear()
+#ref_board.set_piece_at(chess.A1, chess.Piece(chess.ROOK, chess.WHITE))
+
+
+class Button:
+	def __init__(self, x, y, w, h, text, base, hover):
+		self.rect = pygame.Rect(x, y, w, h)
+		self.text = text
+		self.baseColor = base
+		self.hoverColor = hover
+		self.font = pygame.font.SysFont("Arial", 18)
+		self.isHover = False
+
+	def draw(self, surf):
+		color = hoverColor if isHover else baseColor
+		pygame.draw.rect(surf, color, self.rect)
+
+		textSurf = self.font.render(self.text, True, BLACK)
+		textRect = textSurf.get_rect(center=self.rect.center)
+		screen.blit(textSurf, textRect)
+
+	def checkHover(self, mousePos):
+		self.isHover = self.rect.collidepoint(mousePos)
+
+	def isClicked(self, event, mousePos):
+		if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+			if self.rect.collidepoint(mousePos):
+				return True
+			return False
+
 
 def drawBoard():
 	for r in range(8):
@@ -64,35 +96,15 @@ def drawBoard():
 
 
 def indexToMove2(pos1, pos2):
-	# convert array index (like (6,6) --> (5,5)) to UCI notation (g7f6)
-	row1 = pos1[0]
-	row1 = 8 - row1
-
-	col1 = pos1[1]
-	col1 += 1
-	col1 = chr(col1 + 96)
-
-
-	row2 = pos2[0]
-	row2 = 8 - row2
-
-	col2 = pos2[1]
-	col2 += 1
-	col2 = chr(col2 + 96)
-
-	#print(str(col1) + str(row1) + str(col2) + str(row2))
-	return chess.parse_square(str(col1) + str(row1) + str(col2) + str(row2))
+	fromSq = indexToMove1(pos1)
+	toSq = indexToMove1(pos2)
+	return chess.Move(toSq, fromSq)
 
 def indexToMove1(pos1):
-	row1 = pos1[0]
-	row1 = 8 - row1
-
-	col1 = pos1[1]
-	col1 += 1
-	col1 = chr(col1 + 96)
-
-	#print(str(col1) + str(row1))
-	return chess.parse_square(str(col1) + str(row1))
+	r,c = pos1
+	rank = 7-r
+	file = c
+	return chess.square(file, rank)
 
 def calibrate(sample_time=5.0):
 	sums = np.zeros(board_dim, dtype=float)
@@ -114,7 +126,7 @@ def calibrate(sample_time=5.0):
 			flat_count = count.flat
 			
 			for i in range(len(raw_data)):
-				if (raw_data[i] > 100): # filter out nonsense values
+				if (raw_data[i] > 300): # filter out nonsense values
 					flat_sum[i] += raw_data[i]
 					flat_count[i] += 1
 		time.sleep(0.008)
@@ -144,22 +156,24 @@ def boardWithSensors():
 
 			if piece is not None:
 				if (board_data_pres[r,c] > baseVal + OCC_OFF):
-					new_piece = chess.Piece(piece.piece_type, chess.WHITE)
-					board.set_piece_at(sq, new_piece)
-					#print(indexToMove1((r, c)))
-
-				if (board_data_pres[r,c] < baseVal - OCC_OFF):
 					new_piece = chess.Piece(piece.piece_type, chess.BLACK)
 					board.set_piece_at(sq, new_piece)
 					#print(indexToMove1((r, c)))
 
+				if (board_data_pres[r,c] < baseVal - OCC_OFF):
+					new_piece = chess.Piece(piece.piece_type, chess.WHITE)
+					board.set_piece_at(sq, new_piece)
+					#print(indexToMove1((r, c)))
+
+
 time.sleep(2)
 print("calibrating")
-calibrate(8)
+calibrate(15)
 print("calibration done")
 
 board_data_pres = np.copy(base)
 board_data_past = np.copy(board_data_pres)
+
 
 while True:
 	for event in pygame.event.get():
@@ -167,10 +181,7 @@ while True:
 			sys.exit()
 
 	boardWithSensors()
-
-	if keyboard.is_pressed("="):
-		sys.exit()
-
+	drawBoard()
 	if arduino.in_waiting > 0:
 		data = arduino.readline().decode('utf-8', errors='ignore').strip().split()
 		
@@ -184,12 +195,24 @@ while True:
 		except ValueError:
 			pass 
 
-	drawBoard()
-
 	diff = board_data_pres - board_data_past
-	if np.sum(np.abs(diff)) > 10:        
-		os.system('clear')
-		print(board_data_pres.reshape(board_dim))
-		board_data_past = np.copy(board_data_pres)
+	board_diff = board_data_pres - board_data_past
+	removed = [(r,c) for r,row in enumerate(board_diff) for c,val in enumerate(row) if val < -200]
 
-	time.sleep(0.01) 
+	if removed:
+		squareRemoved = removed[0]
+		print(squareRemoved)
+		print(indexToMove1(squareRemoved))
+
+		placed = [(r,c) for r,row in enumerate(board_diff) for c,val in enumerate(row) if val > 200]
+		if placed:
+			squarePlaced = placed[0]
+			print(indexToMove1(squarePlaced))	
+
+			move = indexToMove2(squareRemoved, squarePlaced)
+			board.push(move)
+
+	print(board_data_pres.reshape(board_dim))
+	board_data_past = np.copy(board_data_pres)
+	print("detected + " str(move))
+	os.system('clear')

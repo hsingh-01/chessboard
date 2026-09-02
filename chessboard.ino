@@ -1,4 +1,4 @@
-float analogOuts[64];
+int analogOuts[64];
 int indexMap[64];
 
 const int s0 = 3;
@@ -8,7 +8,7 @@ const int s3 = 6;
 
 void setup() {
   delay(2000);
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   pinMode(13, OUTPUT);
   digitalWrite(13, LOW);
@@ -28,7 +28,7 @@ void setup() {
   pinMode(s3, OUTPUT);
 
   for (int i = 0; i < 64; i++) {
-    analogOuts[i] = -1.0;
+    analogOuts[i] = -1;
   }
 
   for (int i = 0; i < 64; i++) {
@@ -43,7 +43,7 @@ void setup() {
   }
 }
 
-void printArr(float arr[], int n) {
+void printArr(int arr[], int n) {
   for (int i = 0; i < n; i++) {
     Serial.print(arr[i]);
     if (i < n-1) Serial.print(" ");
@@ -62,6 +62,7 @@ void loop() {
     analogOuts[indexMap[i + 16]] = analogRead(A4); 
     analogOuts[indexMap[i + 32]] = analogRead(A3); 
     analogOuts[indexMap[i + 48]] = analogRead(A2);
+    delay(20);
   }
   
   printArr(analogOuts, 64);

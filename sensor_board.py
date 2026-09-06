@@ -16,7 +16,7 @@ for port in ports:
 		break
 
 if not SERIAL_PORT:
-	print("No Arduino detected!")
+	print("you forgot to plug it in")
 	sys.exit(1)
 
 baud = 115200
@@ -24,7 +24,7 @@ arduino = serial.Serial(port=SERIAL_PORT, baudrate=baud, timeout=1)
 time.sleep(2)
 
 base = np.full(board_dim, -1, dtype=float)
-OCC_OFF = 15.0  
+OCC_OFF = 8.0
 
 board_data_pres = np.zeros(board_dim, dtype=float)
 
@@ -127,7 +127,6 @@ print("tracking\n")
 moves = []
 moves_san = []
 turn = adjustTurn(turn, board)
-
 while True:
 	if arduino.in_waiting > 0:
 		data = arduino.readline().decode("utf-8", errors="ignore").strip().split()
@@ -142,41 +141,64 @@ while True:
 	if not game_started:
 		boardWithSensors()
 	else:
-		removed_sqs = []
-		placed_sqs = []
+		lifted_sqs = []   
+		capture_sqs = []  
+		placed_sqs = [] 
 
-	for r in range(8):
-		for c in range(8):
-			sq = indexToMove1((r, c))
-			piece_on_board = board.piece_at(sq) is not None
-			
-			sensor_active = abs(board_data_pres[r, c] - base[r, c]) > OCC_OFF
+		for r in range(8):
+			for c in range(8):
+				sq = indexToMove1((r, c))
+				piece = board.piece_at(sq)
 
-			if piece_on_board and not sensor_active:
-				removed_sqs.append((r, c))
-			elif not piece_on_board and sensor_active:
-				placed_sqs.append((r, c))
+				diff = board_data_pres[r, c] - base[r, c]
 
-		if removed_sqs and placed_sqs:
-			move = indexToMove2(removed_sqs[0], placed_sqs[0])
+				if diff < -OCC_OFF:
+					sensor_color = chess.WHITE
+				elif diff > OCC_OFF:
+					sensor_color = chess.BLACK
+				else:
+					sensor_color = None
+
+				if piece is not None:
+					if sensor_color is None:
+						lifted_sqs.append((r, c))
+					elif sensor_color != piece.color:
+						capture_sqs.append((r, c))
+				else:
+					if sensor_color is not None:
+						placed_sqs.append((r, c))
+
+		move = None
+		is_capture = False
+
+		# how 2 en passant ?
+		if lifted_sqs and capture_sqs:
+			move = indexToMove2(lifted_sqs[0], capture_sqs[0])
+			is_capture = True
+		elif lifted_sqs and placed_sqs and lifted_sqs[0] != placed_sqs[0]:
+			move = indexToMove2(lifted_sqs[0], placed_sqs[0])
+
+		if move is not None:
 			if move in board.legal_moves:
-				moves.append(board.san(move))
 				move_san = board.san(move)
+				moves.append(move_san)
 				moves_san.append(move_san)
 
-				# have to make sure sure to convert to SAN before pushing because pushing makes the turn go to the opposite player, by which the move is no longer legal
 				print(move_san)
 				board.push(move)
 				turn = adjustTurn(turn, board)
-				print(f"move(legal): {move}")
+				tag = " (capture)" if is_capture else ""
+				print(f"move(legal){tag}: {move}")
 			else:
-				from_sq = indexToMove1(removed_sqs[0])
-				to_sq = indexToMove1(placed_sqs[0])
-				piece = board.piece_at(from_sq)
-				if piece:
+				from_sq = indexToMove1(lifted_sqs[0])
+				to_pos = capture_sqs[0] if is_capture else placed_sqs[0]
+				to_sq = indexToMove1(to_pos)
+				p = board.piece_at(from_sq)
+				if p:
 					board.remove_piece_at(from_sq)
-					board.set_piece_at(to_sq, piece)
-					print(f"move (force): {move}")
+					board.set_piece_at(to_sq, p)
+					tag = " capture" if is_capture else ""
+					print(f"move (force{tag}): {move}")
 
 	try:
 		requests.post(
@@ -184,7 +206,6 @@ while True:
 			json={"fen": board.fen(), "data": board_data_pres.tolist(), "moves": moves_san, "turn": turn},
 			timeout=0.2,
 		)
-		#print(moves_san)
 	except Exception:
 		pass
 

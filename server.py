@@ -10,24 +10,24 @@ state = {
     "moves": [],
 }
 
-def render_web_title(title: str) -> str:
+def renderWebTitle(title: str) -> str:
     return f'<h1 style="color: #fff; font-family: Arial, sans-serif; margin-bottom: 15px; text-align: center;">{title}</h1>'
 
-def render_text_box(label: str, content: str) -> str:
+def renderTextBox(label: str, content: str) -> str:
     return f'''
     <div style="background: #2a2a2a; border: 1px solid #444; padding: 10px; margin-bottom: 15px; color: #ddd; font-family: Arial, sans-serif; font-size: 14px;">
         <strong>{label}:</strong> <span>{content}</span>
     </div>
     '''
 
-def render_scrolling_panel(moves) -> str:
+def renderScrollingPanel(moves) -> str:
     rows = []
     for i in range(0, len(moves), 2):
         move_num = (i // 2) + 1
         white = moves[i]
         black = moves[i + 1] if i + 1 < len(moves) else ""
         rows.append(
-            f'<div style="display: flex; font-family: monospace; font-size: 14px; padding: 4px 0;">'
+            f'<div style="display: flex; font-size: 14px; padding: 4px 0;">'
             f'<span style="width: 35px; color: #888;">{move_num}.</span>'
             f'<span style="flex: 1; color: #ddd;">{white}</span>'
             f'<span style="flex: 1; color: #ddd;">{black}</span>'
@@ -41,7 +41,7 @@ def render_scrolling_panel(moves) -> str:
     </div>
     '''
 
-def generate_board_svg(board: chess.Board, data_matrix) -> str:
+def generateBoardSVG(board: chess.Board, data_matrix) -> str:
     margin = 15
     sq_size = 45
     svg_raw = chess.svg.board(board=board, size=500)
@@ -52,14 +52,14 @@ def generate_board_svg(board: chess.Board, data_matrix) -> str:
             val = data_matrix[r][c]
             x = margin + (c + 0.5) * sq_size
             y = margin + ((7 - r) + 0.5) * sq_size + 5 
-            '''text_elements.append(
+            text_elements.append(
                 f'<text x="{x}" y="{y}" font-size="14" font-weight="bold" fill="red" text-anchor="middle">{val:.0f}</text>'
-            )'''
+            )
 
     return svg_raw.replace("</svg>", "".join(text_elements) + "</svg>")
 
 @app.route("/update", methods=["POST"])
-def update_state():
+def updateState():
     req_data = request.get_json(silent=True) or {}
     if "fen" in req_data:
         state["fen"] = req_data["fen"]
@@ -69,20 +69,23 @@ def update_state():
         state["moves"] = req_data["moves"]
     if "turn" in req_data:
         state["turn"] = req_data["turn"]
+    if "eval" in req_data:
+        state["eval"] = req_data["eval"]
     return jsonify({"status": "ok"})
 
 @app.route("/")
-def render_board():
+def renderBoard():
     try:
         board = chess.Board(state["fen"])
     except ValueError:
         return "Invalid FEN string provided", 400
     
-    board_svg = generate_board_svg(board, state["data"])
+    board_svg = generateBoardSVG(board, state["data"])
     
-    title_html = render_web_title("board")
-    panel_html = render_scrolling_panel(state["moves"])
-    turn_box = render_text_box("turn", state["turn"])
+    title_html = renderWebTitle("board")
+    panel_html = renderScrollingPanel(state["moves"])
+    turn_box = renderTextBox("turn", state["turn"])
+    eval_html = renderTextBox("Evaluation: ", state['eval'])
 
     html_content = f"""
     <html>
@@ -110,10 +113,18 @@ def render_board():
                     flex-direction: column;
                     height: 500px;
                 }}
+                .eval {{
+                    background: #2a2a2a;
+                    color: #f5edd7;
+                    font-weight: bold;
+                }}
             </style>
         </head>
         <body>
-            {title_html}
+            <div class = "header-bar">
+                {title_html}
+                <div class ="eval"> {eval_html}</div>
+            </div>
             <div class="main-layout">
                 <div>
                     {board_svg}
@@ -124,7 +135,6 @@ def render_board():
                 </div>
             </div>
             <script>
-                // Auto-scroll move log to bottom on reload
                 const panel = document.getElementById('movePanel');
                 if (panel) {{
                     panel.scrollTop = panel.scrollHeight;

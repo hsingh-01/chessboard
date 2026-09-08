@@ -3,8 +3,10 @@ import serial.tools.list_ports
 import time
 import numpy as np
 import chess
+import chess.engine
 import sys
 import requests
+import threading
 
 board_dim = (8, 8)
 
@@ -29,8 +31,9 @@ OCC_OFF = 8.0
 board_data_pres = np.zeros(board_dim, dtype=float)
 
 game_started = False
-
 turn = None
+
+engine = chess.engine.SimpleEngine.popen_uci("/usr/local/bin/stockfish")
 
 if (len(sys.argv) > 1):
 	fen_input = sys.argv[1]
@@ -50,6 +53,30 @@ except ValueError as e:
 	sys.exit(1)
 
 board = chess.Board(fen_input)
+posEval = "0.0"
+isEval = False
+
+def evaluateFen(fen):
+	global posEval, isEval
+	board = chess.Board(fen)
+
+	limit = chess.engine.Limit(time = 0.3)
+	info = engine.analyse(board, limit)
+
+	score = info['score'].white()
+	if score.is_mate():
+		posEval = "M" + str(score.mate())
+	else:
+		cp = score.score(mate_score = 1000)
+		posEval = f"{cp / 100.0:+.2f}"
+	isEval = False
+	print(posEval)
+
+def asyncEval(fen):
+	global isEval
+	if not isEval:
+		isEval = True
+		threading.Thread(target=evaluateFen, args=(fen,), daemon=True).start()
 
 def adjustTurn(turn, board):
 	turn = "white" if board.turn == chess.WHITE else "black"
@@ -184,12 +211,14 @@ while True:
 				moves.append(move_san)
 				moves_san.append(move_san)
 
-				print(move_san)
 				board.push(move)
+				asyncEval(board.fen())
+
 				turn = adjustTurn(turn, board)
 				tag = " (capture)" if is_capture else ""
-				print(f"move(legal){tag}: {move}")
-			else:
+				print(f"move(legal){tag}: {move_san}")
+
+			'''else:
 				from_sq = indexToMove1(lifted_sqs[0])
 				to_pos = capture_sqs[0] if is_capture else placed_sqs[0]
 				to_sq = indexToMove1(to_pos)
@@ -198,15 +227,16 @@ while True:
 					board.remove_piece_at(from_sq)
 					board.set_piece_at(to_sq, p)
 					tag = " capture" if is_capture else ""
-					print(f"move (force{tag}): {move}")
+					print(f"move (force{tag}): {move}")'''
 
 	try:
 		requests.post(
 			"http://127.0.0.1:5050/update",
-			json={"fen": board.fen(), "data": board_data_pres.tolist(), "moves": moves_san, "turn": turn},
+			json={"fen": board.fen(), "data": board_data_pres.tolist(), "moves": moves_san, "turn": turn, "eval": posEval},
 			timeout=0.2,
 		)
 	except Exception:
 		pass
 
 	time.sleep(0.05)
+engine.quit()

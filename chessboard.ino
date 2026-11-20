@@ -46,7 +46,7 @@ void setup() {
 void printArr(int arr[], int n) {
   for (int i = 0; i < n; i++) {
     Serial.print(arr[i]);
-    if (i < n-1) Serial.print(" ");
+    if (i < n - 1) Serial.print(" ");
   }
   Serial.print("\n");
 }
@@ -58,12 +58,12 @@ void loop() {
     digitalWrite(s2, bitRead(i, 2));
     digitalWrite(s3, bitRead(i, 3));
 
-    analogOuts[indexMap[i]] = analogRead(A5); 
-    analogOuts[indexMap[i + 16]] = analogRead(A4); 
-    analogOuts[indexMap[i + 32]] = analogRead(A3); 
+    analogOuts[indexMap[i]] = analogRead(A5);
+    analogOuts[indexMap[i + 16]] = analogRead(A4);
+    analogOuts[indexMap[i + 32]] = analogRead(A3);
     analogOuts[indexMap[i + 48]] = analogRead(A2);
     delay(20);
   }
-  
+
   printArr(analogOuts, 64);
 }
